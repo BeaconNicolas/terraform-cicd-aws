@@ -17,8 +17,13 @@ terraform.rc
 *.tfvars
 *.tfvars.json
 !*.example.tfvars
+# Per-environment settings for the example workload hold no account IDs or emails.
+!workload/envs/*.tfvars
 
 # Packaged source uploaded by CI
 source.zip
 
 .DS_Store
+
+# Bootstrap backend files are written in CloudShell after the first apply (see README).
+bootstrap/*/backend.tf
