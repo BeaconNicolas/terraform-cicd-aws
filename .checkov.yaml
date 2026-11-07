@@ -1,0 +1,26 @@
+# checkov settings: run `checkov -d .` from the repository root.
+# Each skipped check is a deliberate trade-off for a free-tier reference project.
+framework:
+  - terraform
+compact: true
+quiet: true
+skip-check:
+  # Customer-managed KMS keys cost about 1 USD a month each, even when idle.
+  # Buckets use SSE-S3; bootstrap/tooling has create_kms_key for those who want a CMK.
+  - CKV_AWS_145 # S3 default encryption with KMS
+  - CKV_AWS_136 # ECR encryption with KMS
+  - CKV_AWS_158 # CloudWatch log group encryption with KMS
+  # Access logs and replication would add buckets, requests and storage costs.
+  - CKV_AWS_18  # S3 access logging
+  - CKV_AWS_144 # S3 cross-region replication
+  # Build logs are kept 14 days by default (log_retention_days) to stay in the free tier.
+  - CKV_AWS_338 # log retention of at least one year
+  # Tools image tags are immutable except "current", which Test/Plan/Apply run.
+  - CKV_AWS_51  # ECR immutable tags (IMMUTABLE_WITH_EXCLUSION is not recognised)
+  # The example workload bucket has no consumers of object events.
+  - CKV2_AWS_62 # S3 event notifications
+  # The example parameter holds a non-secret greeting.
+  - CKV2_AWS_34 # SSM parameter encryption
+# terraform test files are not Terraform configuration.
+skip-path:
+  - tests/

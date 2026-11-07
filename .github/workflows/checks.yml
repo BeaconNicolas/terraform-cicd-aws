@@ -1,0 +1,34 @@
+# Offline checks for pull requests: format, validate, lint, terraform test and
+# shellcheck. Needs no AWS access. Make it a required status check on int and
+# prod so promotions only merge when it passes.
+name: Checks
+
+on:
+  pull_request:
+    branches: [dev, int, prod]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Terraform and TFLint (SHA256 checked)
+        run: |
+          INSTALL_DIR="${RUNNER_TEMP}/bin" ./scripts/install-terraform.sh --tflint
+          echo "${RUNNER_TEMP}/bin" >>"${GITHUB_PATH}"
+
+      - name: fmt, validate, tflint, terraform test
+        run: ./scripts/check.sh
+
+      - name: shellcheck
+        run: shellcheck -x scripts/*.sh bootstrap/tooling/ci/*.sh

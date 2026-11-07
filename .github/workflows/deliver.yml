@@ -1,0 +1,78 @@
+# On a push to dev, int or prod: package the repository and upload it as
+# <branch>/source.zip to the S3 source bucket. EventBridge then starts that
+# environment's CodePipeline. GitHub signs in to AWS with OIDC (no stored keys).
+name: Deliver
+
+on:
+  push:
+    branches: [dev, int, prod]
+
+permissions:
+  id-token: write # request the OIDC token for AWS
+  contents: read
+
+concurrency:
+  group: deliver-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  upload-source:
+    name: Upload source (${{ github.ref_name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # The GitHub Environment holds this branch's AWS settings. The AWS role
+    # trusts only tokens for this environment of this repository.
+    environment: ${{ github.ref_name }}
+    env:
+      TARGET_ENV: ${{ github.ref_name }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      SOURCE_BUCKET: ${{ vars.SOURCE_BUCKET }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - name: Check the environment's AWS settings
+        id: config
+        run: |
+          missing=()
+          for name in AWS_ROLE_ARN SOURCE_BUCKET AWS_REGION; do
+            [ -n "${!name}" ] || missing+=("${name}")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            msg="GitHub Environment '${TARGET_ENV}' has no ${missing[*]}, so nothing was uploaded and no pipeline ran. Add the variables under Settings > Environments > ${TARGET_ENV} (README: GitHub settings), then re-run this workflow."
+            echo "::warning title=AWS not configured for ${TARGET_ENV}::${msg}"
+            printf '### Skipped: AWS is not configured for %s\n\n%s\n' "${TARGET_ENV}" "${msg}" >>"${GITHUB_STEP_SUMMARY}"
+            echo "configured=false" >>"${GITHUB_OUTPUT}"
+          else
+            echo "configured=true" >>"${GITHUB_OUTPUT}"
+          fi
+
+      - name: Check out
+        if: steps.config.outputs.configured == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Sign in to AWS with OIDC
+        if: steps.config.outputs.configured == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-${{ github.ref_name }}-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Package and upload source.zip
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          git archive --format=zip --output "${RUNNER_TEMP}/source.zip" HEAD
+          # Shown as the revision in the CodePipeline console (ASCII only).
+          summary="$(git log -1 --format='%h %s' | LC_ALL=C tr -cd '\40-\176' | cut -c1-200)"
+          metadata="$(jq -cn --arg s "${summary}" '{"codepipeline-artifact-revision-summary": $s}')"
+          aws s3 cp "${RUNNER_TEMP}/source.zip" "s3://${SOURCE_BUCKET}/${TARGET_ENV}/source.zip" \
+            --metadata "${metadata}" --only-show-errors
+          {
+            echo "### Uploaded ${TARGET_ENV}/source.zip"
+            echo
+            echo "Commit: \`${summary}\`"
+            echo
+            echo "The ${TARGET_ENV} pipeline starts in a few seconds: https://${AWS_REGION}.console.aws.amazon.com/codesuite/codepipeline/pipelines?region=${AWS_REGION}"
+          } >>"${GITHUB_STEP_SUMMARY}"

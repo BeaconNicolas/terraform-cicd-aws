@@ -10,7 +10,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=../tools-image/versions.env
+# shellcheck source=SCRIPTDIR/../tools-image/versions.env
 source "${repo_root}/tools-image/versions.env"
 
 install_dir="${INSTALL_DIR:-${HOME}/bin}"
