@@ -56,3 +56,8 @@ output "target_accounts" {
     account => sort([for env, e in local.envs : env if e.target_account_id == account])
   }
 }
+
+output "aws_region" {
+  description = "Region of the pipelines and state bucket. bootstrap/target uses the same one."
+  value       = local.region
+}
