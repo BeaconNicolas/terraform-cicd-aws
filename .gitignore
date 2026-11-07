@@ -1,0 +1,24 @@
+# Terraform working files
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Local variable files can hold account IDs and emails; commit only the examples.
+*.tfvars
+*.tfvars.json
+!*.example.tfvars
+
+# Packaged source uploaded by CI
+source.zip
+
+.DS_Store
